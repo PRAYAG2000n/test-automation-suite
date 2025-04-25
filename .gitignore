@@ -7,3 +7,6 @@ coverage-report/
 videos/
 *.pyc
 k6-results.json
+allure-report/
+allure-*.tgz
+.coverage
