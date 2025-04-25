@@ -1,0 +1,64 @@
+name: Test Automation Suite
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+env:
+  SAUCEDEMO_URL:  ${{ secrets.SAUCEDEMO_URL }}
+  STANDARD_USER:  ${{ secrets.STANDARD_USER }}
+  STANDARD_PASS:  ${{ secrets.STANDARD_PASS }}
+  LOCKED_USER:    ${{ secrets.LOCKED_USER }}
+  LOCKED_PASS:    ${{ secrets.LOCKED_PASS }}
+  PROBLEM_USER:   ${{ secrets.PROBLEM_USER }}
+  PROBLEM_PASS:   ${{ secrets.PROBLEM_PASS }}
+  PERF_USER:      ${{ secrets.PERF_USER }}
+  PERF_PASS:      ${{ secrets.PERF_PASS }}
+  APP_BASE_URL:   http://localhost:8000
+
+jobs:
+  playwright-tests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install deps
+        run: |
+          pip install -r requirements.txt
+          playwright install chromium firefox
+          playwright install-deps
+      - name: Run tests
+        run: pytest tests/ -n auto --alluredir=allure-results
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: allure-results
+          path: allure-results/
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: test-videos
+          path: videos/
+
+  k6-load-test:
+    runs-on: ubuntu-latest
+    needs: playwright-tests
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - uses: grafana/setup-k6-action@v1
+      - name: Install and start API
+        run: |
+          pip install fastapi uvicorn
+          uvicorn app.main:app --host 0.0.0.0 --port 8000 &
+          sleep 3
+          curl -f http://localhost:8000/health
+      - name: Run k6
+        run: k6 run k6/load_test.js --env APP_BASE_URL=http://localhost:8000
